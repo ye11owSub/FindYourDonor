@@ -4,6 +4,10 @@ from telebot import types
 from msg_consts import *
 import re
 
+# TODO: хорошо бы тут всё закомментировать, а то я уже путаюсь
+# TODO: нужно добавить обработчики телефона и локации
+
+
 bot = telebot.TeleBot(api_token)
 
 
@@ -17,6 +21,8 @@ def main_keyboard(need_reg=False):
     keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
     keyboard.add(NEW_DONOR if need_reg else EDIT_DONOR,
                  FIND_DONOR)
+    if not need_reg:
+        add_geophone_keyboard(keyboard)
     return keyboard
 
 
@@ -39,9 +45,12 @@ def add_back_to_main_inline(keyboard=None):
 
 @bot.message_handler(commands=['start'])
 @bot.callback_query_handler(func=lambda call: call.data == BACK_TO_MAIN)
-def main_handler(msg: types.Message):
+def main_handler(msg_call):
+    chat_id = msg_call.chat.id if isinstance(msg_call, types.Message) else msg_call.message.chat.id
     # TODO: Здесь должна быть проверка на зарегистрированность пользователя
-    bot.send_message(msg.chat.id, MAIN_MSG, reply_markup=main_keyboard(True))
+    donor_exist = False
+    keyboard = main_keyboard(donor_exist)
+    bot.send_message(chat_id, MAIN_MSG, reply_markup=keyboard)
 
 
 # region: Обработчики сообщений по регистрации / изменению данных донора
@@ -87,30 +96,40 @@ def add_geophone_keyboard(keyboard=None, phone=True, geo=True):
 
 
 @bot.message_handler(regexp=NEW_DONOR)
+def start_reg_handler(msg: types.Message):
+    bot.send_message(msg.chat.id, START_REG, reply_markup=types.ReplyKeyboardRemove())
+    bot.send_message(msg.chat.id, HOW_OLD, reply_markup=add_back_to_main_inline())
+
+
 @bot.callback_query_handler(func=birth_changer)
-def start_reg_handler(msg_call):
-    chat_id = msg_call.chat.id if isinstance(msg_call, types.Message) else msg_call.message.chat.id
-    bot.send_message(chat_id, HOW_OLD, reply_markup=add_back_to_main_inline())
+def birth_changer_handler(call: types.CallbackQuery):
+    bot.edit_message_text(HOW_OLD,
+                          call.message.chat.id,
+                          call.message.message_id,
+                          reply_markup=add_back_to_main_inline())
 
 
 @bot.message_handler(regexp=DATE_REGEXP)
 def birth_handler(msg: types.Message):
+    """Функция, обрабатывающая дату рождения пользователя"""
     import datetime
     raw_birth_date = msg.text
     try:
         raw_birth_date = raw_birth_date.replace('/', '.')
         birth_date = datetime.datetime.strptime(raw_birth_date, '%d.%m.%Y').date()
         age = (datetime.date.today() - birth_date).days / 365
+        # До 18 лет нельзя быть донором
+        # TODO: Здесь должна быть проверка на зарегистрированность пользователя
+        user_exist = False
         if age < 18:
             bot.send_message(msg.chat.id, AGE_YOUNG, reply_markup=main_keyboard(True))
-        # TODO: Здесь должна быть проверка на зарегистрированность пользователя
-        elif False:
+        if False:
             # TODO: Здесь должно быть обновление даты рождения пользователя
             user_id = msg.chat.id
             # TODO: Продумать изменение предыдущего сообщения с инлайн-кнопками!
             bot.send_message(user_id,
                              BIRTH_CHANGE_SUCCESS,
-                             reply_markup=add_geophone_keyboard(main_keyboard(False)))
+                             reply_markup=main_keyboard())
         else:
             blood_group_keyboard = types.InlineKeyboardMarkup()
             # Запишем возраст в inline-кнопку
@@ -157,6 +176,21 @@ def rh_factor_handler(call: types.CallbackQuery):
                      reply_markup=add_geophone_keyboard(main_keyboard()))
 
 
+@bot.message_handler(regexp=EDIT_DONOR)
+def main_changer(msg: types.Message):
+    change_list = types.InlineKeyboardMarkup()
+    # TODO: Здесь имеет смысл сделать запрос в БД за данынми пользователя
+    # TODO: Вместе с выводом этих данных, также удалим клавиатуру главного меню
+    # TODO: В каждое сообщение-настройку, следовательно, стоит добавить текущие данные
+    for inline_data, desc in MAIN_CHANGER[1:]:
+        btn = types.InlineKeyboardButton(text=desc, callback_data=inline_data)
+        change_list.add(btn)
+    add_back_to_main_inline(change_list)
+    bot.send_message(msg.chat.id,
+                     MAIN_CHANGER[0],
+                     reply_markup=change_list)
+
+
 @bot.callback_query_handler(func=bt_changer)
 def bt_changer_handler(call):
     blood_group_keyboard = types.InlineKeyboardMarkup()
@@ -180,7 +214,7 @@ def blood_type_change_handler(call: types.CallbackQuery):
     user_id = call.message.chat.id
     blood_type = int(call.data.split(':')[1])
     # TODO: Здесь должна быть запись в БД измененной группы крови
-    bot.send_message(user_id, BT_CHANGE_SUCCESS, reply_markup=add_geophone_keyboard(main_keyboard(False)))
+    bot.send_message(user_id, BT_CHANGE_SUCCESS, reply_markup=main_keyboard())
 
 
 @bot.callback_query_handler(func=rh_changer)
@@ -205,7 +239,7 @@ def rh_factor_change_handler(call: types.CallbackQuery):
     user_id = call.message.chat.id
     rh = int(call.data.split(':')[1])
     # TODO: Здесь должна быть запись в БД измененного резус-фактора
-    bot.send_message(user_id, RH_CHANGE_SUCCESS, reply_markup=add_geophone_keyboard(main_keyboard(False)))
+    bot.send_message(user_id, RH_CHANGE_SUCCESS, reply_markup=main_keyboard())
 # endregion
 
 
