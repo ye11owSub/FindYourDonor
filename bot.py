@@ -173,7 +173,7 @@ def rh_factor_handler(call: types.CallbackQuery):
                           reply_markup=None)
     bot.send_message(call.message.chat.id,
                      NEED_GEOPHONE,
-                     reply_markup=add_geophone_keyboard(main_keyboard()))
+                     reply_markup=main_keyboard())
 
 
 @bot.message_handler(regexp=EDIT_DONOR)
