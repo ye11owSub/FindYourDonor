@@ -49,7 +49,7 @@ def main_handler(msg_call):
     chat_id = msg_call.chat.id if isinstance(msg_call, types.Message) else msg_call.message.chat.id
     # TODO: Здесь должна быть проверка на зарегистрированность пользователя
     donor_exist = False
-    keyboard = main_keyboard(donor_exist)
+    keyboard = main_keyboard(not donor_exist)
     bot.send_message(chat_id, MAIN_MSG, reply_markup=keyboard)
 
 
@@ -134,7 +134,7 @@ def birth_handler(msg: types.Message):
             blood_group_keyboard = types.InlineKeyboardMarkup()
             # Запишем возраст в inline-кнопку
             inline_data_tmpl = 'birth:{},bt:{}'.format(raw_birth_date, '{}')
-            for bt, desc in BLOOD_TYPES:
+            for bt, desc in BLOOD_TYPES.items():
                 inline_data = inline_data_tmpl.format(bt)
                 btn = types.InlineKeyboardButton(text=desc, callback_data=inline_data)
                 blood_group_keyboard.add(btn)
@@ -148,7 +148,7 @@ def birth_handler(msg: types.Message):
 def blood_type_handler(call: types.CallbackQuery):
     inline_data_tmpl = '{},rh:{}'.format(call.data, '{}')
     rh_keyboard = types.InlineKeyboardMarkup()
-    for rht, desc in RH_TYPES:
+    for rht, desc in RH_TYPES.items():
         inline_data = inline_data_tmpl.format(rht)
         btn = types.InlineKeyboardButton(text=desc, callback_data=inline_data)
         rh_keyboard.add(btn)
@@ -179,11 +179,20 @@ def rh_factor_handler(call: types.CallbackQuery):
 @bot.message_handler(regexp=EDIT_DONOR)
 def main_changer(msg: types.Message):
     change_list = types.InlineKeyboardMarkup()
-    # TODO: Здесь имеет смысл сделать запрос в БД за данынми пользователя
-    # TODO: Вместе с выводом этих данных, также удалим клавиатуру главного меню
-    # TODO: В каждое сообщение-настройку, следовательно, стоит добавить текущие данные
-    for inline_data, desc in MAIN_CHANGER[1:]:
-        btn = types.InlineKeyboardButton(text=desc, callback_data=inline_data)
+    # TODO: Здесь имеет смысл сделать запрос в БД за данными пользователя
+    # FIXME: Заглушка с данными
+    # Префикс с_ обозначает current (текущие) данные
+    user_raw_data = {'birth': 'dd.mm.yyyy',
+                     'bt': 1,
+                     'rh': 0}
+    # Вместе с выводом пользовательских данных удалим клавиатуру главного меню
+    bot.send_message(msg.chat.id,
+                     USER_INFO_TMPL.format(birth_fmt=user_raw_data['birth'],
+                                           bt_fmt=BLOOD_TYPES[user_raw_data['bt']],
+                                           rh_fmt=RH_TYPES[user_raw_data['rh']]),
+                     reply_markup=types.ReplyKeyboardRemove())
+    for inline_id, desc in MAIN_CHANGER[1:]:
+        btn = types.InlineKeyboardButton(text=desc, callback_data=inline_id)
         change_list.add(btn)
     add_back_to_main_inline(change_list)
     bot.send_message(msg.chat.id,
@@ -192,12 +201,12 @@ def main_changer(msg: types.Message):
 
 
 @bot.callback_query_handler(func=bt_changer)
-def bt_changer_handler(call):
+def bt_changer_handler(call: types.CallbackQuery):
     blood_group_keyboard = types.InlineKeyboardMarkup()
     # Шаблон для инлайн-данных
     inline_data_tmpl = 'bt:{}'
     # Сформируем инлайн-кнопки
-    for bt, desc in BLOOD_TYPES:
+    for bt, desc in BLOOD_TYPES.items():
         inline_data = inline_data_tmpl.format(bt)
         btn = types.InlineKeyboardButton(text=desc, callback_data=inline_data)
         blood_group_keyboard.add(btn)
@@ -223,7 +232,7 @@ def rh_changer_handler(call):
     # Шаблон для инлайн-данных
     inline_data_tmpl = 'rh:{}'
     # Сформируем инлайн-кнопки
-    for rht, desc in RH_TYPES:
+    for rht, desc in RH_TYPES.items():
         inline_data = inline_data_tmpl.format(rht)
         btn = types.InlineKeyboardButton(text=desc, callback_data=inline_data)
         rh_keyboard.add(btn)
@@ -240,6 +249,8 @@ def rh_factor_change_handler(call: types.CallbackQuery):
     rh = int(call.data.split(':')[1])
     # TODO: Здесь должна быть запись в БД измененного резус-фактора
     bot.send_message(user_id, RH_CHANGE_SUCCESS, reply_markup=main_keyboard())
+
+
 # endregion
 
 

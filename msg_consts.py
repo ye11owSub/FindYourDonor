@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 # region: Сообщения, связанные с главной клавиатурой
 NEW_DONOR = 'Готов стать донором'
 EDIT_DONOR = 'Изменить мои данные'
@@ -11,15 +13,15 @@ DATE_REGEXP = r'^\d{1,2}[/.]\d{1,2}[/.]\d{4}$'
 AGE_YOUNG = 'К сожалению, Вы еще не достигли совершеннолетия. ' \
             'Тем не менее, Вы можете воспользоваться поиском донора.'
 CHOOSE_BLOOD_TYPE = 'Выберите Вашу группу крови:'
-BLOOD_TYPES = [(1, '0 (I)'),
-               (2, 'A (II)'),
-               (3, 'B (III)'),
-               (4, 'AB (VI)')]
+BLOOD_TYPES = OrderedDict([(1, '0 (I)'),
+                           (2, 'A (II)'),
+                           (3, 'B (III)'),
+                           (4, 'AB (VI)')])
 DATE_BT_DATA_REGEXP = r'^birth:\d{1,2}\.\d{1,2}\.\d{4},bt:\d$'
 CHOOSE_RH_TYPE = 'Выберите Ваш резус-фактор:'
-RH_TYPES = [(0, 'Rh- (Отрицательный)'),
-            (1, 'Rh+ (Положительный)'),
-            (2, 'Не знаю')]
+RH_TYPES = OrderedDict([(0, 'Rh- (Отрицательный)'),
+                        (1, 'Rh+ (Положительный)'),
+                        (2, 'Не знаю')])
 DATE_BT_RH_DATA_REGEXP = r'^birth:\d{1,2}\.\d{1,2}\.\d{4},bt:\d,rh:\d$'
 SUCCESS_REG = 'Вы успешно зарегистрированы!'
 NEED_GEOPHONE = 'Нам также полезно было бы знать Ваш номер телефона и обычное местоположение.\n' \
@@ -30,13 +32,17 @@ MAIN_CHANGER = ['Что вы хотите изменить?',
                 ('bt', 'Группа крови'),
                 ('rh', 'Резус-фактор')]
 
+USER_INFO_TMPL = 'Ваши текущие данные:\n' \
+                 'Дата рождения: {birth_fmt}\n' \
+                 'Группа крови: {bt_fmt}\n' \
+                 'Резус-фактор: {rh_fmt}'
 
 SHARE_PHONE = 'Поделиться номером телефона'
 SHARE_LOCATION = 'Поделиться местоположением'
 
-RH_CHANGER_REGEXP = r'^rh$'
 BIRTH_CHANGER_REGEXP = r'^birth$'
 BT_CHANGER_REGEXP = r'^bt$'
+RH_CHANGER_REGEXP = r'^rh$'
 
 BIRTH_CHANGE_SUCCESS = 'Ваша дата рождения успешно обновлена.'
 BT_DATA_CHANGE_REGEXP = r'^bt:\d$'
