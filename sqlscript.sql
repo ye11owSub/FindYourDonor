@@ -32,23 +32,24 @@ SET default_with_oids = false;
 
   CREATE TABLE "Donor"(
 	"id" int,
-	"goup" smallint,
+	"blood_type" smallint,
 	"rhesus" boolean,
 	"birth_date" date,
 	"longitude" real,
 	"latitude" real,
-	"donor_flag" boolean
+	
 );
 
 CREATE TABLE public."Request" (
 	"id" int,
-	"need_goup" smallint,
+	"need_blood_type" smallint,
 	"need_rhesus" boolean,
 	"message" text,
 	"post_date" date,
 	"longitude" real,
 	"latitude" real,
-	"request_flag" boolean
+	"registration_flag" boolean,
+	"send_flag" boolean
 );
 
 SET client_encoding = 'UTF-8';

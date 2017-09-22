@@ -13,12 +13,11 @@ class Donor():
     """
     Поля таблицы:
     "id": int,
-	"goup": smallserial,
+	"blood_type": smallserial,
 	"rhesus" boolean,
 	"birth_date" date,
 	"longitude" real,
 	"latitude" real,
-	"donor_flag" boolean
     """
 
     # def __init__(self, host='localhost', port=5432, username='postgres', password='postgres'):
@@ -39,7 +38,7 @@ class Donor():
 
     def new_donor(donor_info: dict):
         keys = donor_info.keys()
-        must_be = ("id", "goup", "rhesus", "birth_date")
+        must_be = ("id", "blood_type", "rhesus", "birth_date")
         if any(param not in keys for param in must_be):
             raise error_message
         query_text = 'INSERT INTO "Donor" ({columns}) VALUES ({values})'
@@ -47,6 +46,7 @@ class Donor():
                                       values=', '.join(prepared(len(keys))))
         vals = [donor_info[x] for x in keys]
         with pg.DB(**CONFIG_PARAMS) as conn:
+            print(ins_query, *vals)
             conn.query(ins_query, *vals)
 
     def try_exist(id: int):
@@ -77,12 +77,13 @@ class Request():
     """
     Поля таблицы:
     "id"int,
-	"need_goup" smallserial,
+	"need_blood_type" smallserial,
 	"need_rhesus" boolean,
 	"post_date" date,
 	"longitude" real,
 	"latitude" real
-	"request_flag" boolean
+	"registration_flag" boolean,
+	"send_flag" boolean 
     """
 
     def new_request(request_info: dict):
