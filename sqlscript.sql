@@ -36,7 +36,7 @@ SET default_with_oids = false;
 	"rhesus" boolean,
 	"birth_date" date,
 	"longitude" real,
-	"latitude" real,
+	"latitude" real
 	
 );
 
