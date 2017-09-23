@@ -30,7 +30,7 @@ SET default_tablespace = '';
 
 SET default_with_oids = false;
 
-  CREATE TABLE "Donor"(
+CREATE TABLE "Donor"(
 	"id" int,
 	"blood_type" smallint,
 	"rhesus" boolean,
