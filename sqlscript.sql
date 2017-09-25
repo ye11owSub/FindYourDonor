@@ -41,7 +41,8 @@ CREATE TABLE "Donor"(
 );
 
 CREATE TABLE public."Request" (
-	"id" int,
+	"request_id" smallserial,
+	"user_id" int,
 	"need_blood_type" smallint,
 	"need_rhesus" boolean,
 	"message" text,
