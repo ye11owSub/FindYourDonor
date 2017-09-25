@@ -16,14 +16,16 @@ def load_config():
         config = pickle.load(cfg_file)
     return config
 
-def crate_query_text(info:dict):
+
+def create_query_text(info: dict):
     columns, values_len = "", ""
     values = list()
     for i, (key, value) in enumerate(info.items()):
         columns += ('\"' + key + '\",')
         values_len += ('$' + str(i + 1) + ',')
         values.append(value)
-    return columns[:-1],values_len[:-1],values
+    return columns[:-1], values_len[:-1], values
+
 
 def prepared(n):
     return ['$' + str(k) for k in range(1, n + 1)]
