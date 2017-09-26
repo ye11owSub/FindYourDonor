@@ -43,10 +43,11 @@ CREATE TABLE "Donor"(
 CREATE TABLE public."Request" (
 	"request_id" smallserial,
 	"user_id" int,
+	"phone_number" text,
 	"need_blood_type" smallint,
 	"need_rhesus" boolean,
 	"message" text,
-	"post_date" date,
+	"post_date" timestamp,
 	"longitude" real,
 	"latitude" real,
 	"registration_flag" boolean,
