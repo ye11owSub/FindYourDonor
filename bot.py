@@ -171,7 +171,8 @@ def rh_factor_handler(call: types.CallbackQuery):
     Donor.new_donor({'id': call.message.chat.id,
                      'birth_date': birth_dt,
                      'blood_type': blood_type,
-                     'rhesus': rh})
+                     # В БД резус хранится в виде  TRUE (+), FALSE (-) и NULL (Не знаю)
+                     'rhesus': (False, True, None)[rh]})
     bot.edit_message_text(SUCCESS_REG,
                           call.message.chat.id,
                           call.message.message_id,
@@ -184,16 +185,14 @@ def rh_factor_handler(call: types.CallbackQuery):
 @bot.message_handler(regexp=EDIT_DONOR)
 def main_changer(msg: types.Message):
     change_list = types.InlineKeyboardMarkup()
-    # TODO: Здесь имеет смысл сделать запрос в БД за данными пользователя
-    # FIXME: Заглушка с данными
-    user_raw_data = {'birth': 'dd.mm.yyyy',
-                     'bt': 1,
-                     'rh': 0}
+    user_raw_data = Donor.get_donor_data(msg.chat.id)
+    # Разберем сырые данные и выведем их в сообщении
     # Вместе с выводом пользовательских данных удалим клавиатуру главного меню
     bot.send_message(msg.chat.id,
-                     USER_INFO_TMPL.format(birth_fmt=user_raw_data['birth'],
-                                           bt_fmt=BLOOD_TYPES[user_raw_data['bt']],
-                                           rh_fmt=RH_TYPES[user_raw_data['rh']]),
+                     USER_INFO_TMPL.format(birth_fmt=user_raw_data[3].strftime('%d.%m.%Y'),
+                                           bt_fmt=BLOOD_TYPES[user_raw_data[1]],
+                                           # В БД резус хранится в виде  TRUE (+), FALSE (-) и NULL (Не знаю)
+                                           rh_fmt=RH_TYPES[{False: 0, True: 1, None: 2}[user_raw_data[2]]]),
                      reply_markup=types.ReplyKeyboardRemove())
     for inline_id, desc in MAIN_CHANGER[1:]:
         btn = types.InlineKeyboardButton(text=desc, callback_data=inline_id)
@@ -251,7 +250,8 @@ def rh_changer_handler(call):
 def rh_factor_change_handler(call: types.CallbackQuery):
     user_id = call.message.chat.id
     rh = int(call.data.split(':')[1])
-    Donor.update_with_data(user_id, {'rhesus': rh})
+    # В БД храним резус-фактор как TRUE (+), FALSE (-) и NULL (Не знаю)
+    Donor.update_with_data(user_id, {'rhesus': (False, True, None)[rh]})
     bot.send_message(user_id, RH_CHANGE_SUCCESS, reply_markup=main_keyboard())
 
 
