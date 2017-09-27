@@ -1,13 +1,10 @@
 import pg
 from helpers import load_config, create_query_text
+from config import connect_data
 
 error_message = "Параметры указаны не верно"
 # CONFIG_PARAMS = load_config()
-CONFIG_PARAMS = {'passwd': 'postgres',
-                 'user': 'postgres',
-                 'port': 5432,
-                 'dbname': 'Blood',
-                 'host': 'localhost'}
+CONFIG_PARAMS = connect_data
 
 
 class Donor:
@@ -15,10 +12,10 @@ class Donor:
     Поля таблицы:
     "id": int,
     "blood_type": smallint,
-    "rhesus" boolean,
-    "birth_date" date,
-    "longitude" real,
-    "latitude" real,
+    "rhesus": boolean,
+    "birth_date": date,
+    "longitude": real,
+    "latitude": real,
     """
 
     @staticmethod
@@ -37,6 +34,17 @@ class Donor:
 
     @staticmethod
     def get_donor_data(user_id: int) -> tuple:
+        """
+        использовать только если донор есть в базе 
+        :param user_id: 
+        :return: неизменяймый список типа:
+                            (id(int),
+                            blood_type(smallint), 
+                            rhesus(1/0),
+                            birth_date(datetime.date(1994, 12, 07)),
+                            longitude(real),
+                            latitude(real))
+        """
         query_text = 'SELECT * FROM "Donor" WHERE "id" = $1'
         with pg.DB(**CONFIG_PARAMS) as conn:
             return conn.query(query_text, user_id).getresult()[0]
@@ -56,14 +64,16 @@ class Request:
     """
     Поля таблицы:
     "request_id" smallserial,
-    "user_id" int,
-    "need_blood_type" smallint,
-    "need_rhesus" boolean,
-    "post_date" date,
-    "longitude" real,
-    "latitude" real
-    "registration_flag" boolean,
-    "send_flag" boolean
+	"user_id" int,
+	"phone_number" text,
+	"need_blood_type" smallint,
+	"need_rhesus" boolean,
+	"message" text,
+	"post_date" timestamp,
+	"longitude" real,
+	"latitude" real,
+	"registration_flag" boolean,
+	"send_flag" boolean
     """
 
     @staticmethod
@@ -94,4 +104,4 @@ class Request:
             query = query_text.format(columns=columns, values=values_len)
             with pg.DB(**CONFIG_PARAMS) as conn:
                 return conn.query(query, *values).getresult()[0][0]
-                # return request_id
+
