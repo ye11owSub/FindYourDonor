@@ -14,6 +14,18 @@ import re
 bot = telebot.TeleBot(api_token)
 
 
+def add_geophone_keyboard(keyboard=None, phone=True, geo=True):
+    if not keyboard:
+        keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+    if phone:
+        phone_btn = types.KeyboardButton(SHARE_PHONE, request_contact=True)
+        keyboard.add(phone_btn)
+    if geo:
+        geo_btn = types.KeyboardButton(SHARE_LOCATION, request_location=True)
+        keyboard.add(geo_btn)
+    return keyboard
+
+
 def main_keyboard(need_reg=False):
     """
     Данная функция возвращает клавиатуру главного меню
@@ -25,7 +37,7 @@ def main_keyboard(need_reg=False):
     keyboard.add(NEW_DONOR if need_reg else EDIT_DONOR,
                  FIND_DONOR)
     if not need_reg:
-        add_geophone_keyboard(keyboard)
+        add_geophone_keyboard(keyboard, phone=False)
     return keyboard
 
 
@@ -84,18 +96,6 @@ def bt_changer(call):
 
 def rh_changer(call):
     return bool(re.match(RH_CHANGER_REGEXP, call.data))
-
-
-def add_geophone_keyboard(keyboard=None, phone=True, geo=True):
-    if not keyboard:
-        keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
-    if phone:
-        phone_btn = types.KeyboardButton(SHARE_PHONE, request_contact=True)
-        keyboard.add(phone_btn)
-    if geo:
-        geo_btn = types.KeyboardButton(SHARE_LOCATION, request_location=True)
-        keyboard.add(geo_btn)
-    return keyboard
 
 
 @bot.message_handler(regexp=NEW_DONOR)
@@ -251,10 +251,38 @@ def rh_factor_change_handler(call: types.CallbackQuery):
     user_id = call.message.chat.id
     rh = int(call.data.split(':')[1])
     # В БД храним резус-фактор как TRUE (+), FALSE (-) и NULL (Не знаю)
+    bot.send_message(user_id, RH_CHANGE_SUCCESS, reply_markup=types.ReplyKeyboardRemove())
+    bot.send_message(user_id, MAIN_MSG, reply_markup=main_keyboard())
     Donor.update_with_data(user_id, {'rhesus': (False, True, None)[rh]})
-    bot.send_message(user_id, RH_CHANGE_SUCCESS, reply_markup=main_keyboard())
 
 
+@bot.message_handler(content_types=['contact'])
+def phone_change_handler(msg: types.Message):
+    user_id = msg.chat.id
+    # TODO: Здесь необходимо получать незаполненную заявку пользователя
+    if msg.contact.user_id:
+        if user_id != msg.contact.user_id:
+            bot.send_message(user_id, PHONE_CHANGE_CHEATING, reply_markup=types.ReplyKeyboardRemove())
+        else:
+            bot.send_message(user_id, PHONE_CHANGE_SUCCESS, reply_markup=types.ReplyKeyboardRemove())
+            # TODO: Здесь необходимо обновить телефон в заявке
+
+    else:
+        bot.send_message(user_id, PHONE_CHANGE_NEED_TELEGRAM, reply_markup=types.ReplyKeyboardRemove())
+    bot.send_message(user_id, MAIN_MSG, reply_markup=main_keyboard())
+
+
+@bot.message_handler(content_types=['location'])
+def geo_change_handler(msg: types.Message):
+    user_id = msg.chat.id
+    # В зависимости от сообщения, к которому будет прикреплено местоположение
+    # Будем считать, изменяется местоположения пользователя или заявки на поиск донора
+    if msg.reply_to_message and msg.reply_to_message.text == MAIN_MSG:
+        # Местоположение пользователя
+        Donor.update_with_data(user_id, {'longitude': msg.location.longitude,
+                                         'latitude': msg.location.latitude})
+        bot.send_message(user_id, GEO_USER_CHANGE_SUCCESS, reply_markup=types.ReplyKeyboardRemove())
+        bot.send_message(user_id, MAIN_MSG, reply_markup=main_keyboard())
 # endregion
 
 
