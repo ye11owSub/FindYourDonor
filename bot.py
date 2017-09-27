@@ -277,7 +277,7 @@ def geo_change_handler(msg: types.Message):
     user_id = msg.chat.id
     # В зависимости от сообщения, к которому будет прикреплено местоположение
     # Будем считать, изменяется местоположения пользователя или заявки на поиск донора
-    if msg.reply_to_message == MAIN_MSG:
+    if msg.reply_to_message and msg.reply_to_message.text == MAIN_MSG:
         # Местоположение пользователя
         Donor.update_with_data(user_id, {'longitude': msg.location.longitude,
                                          'latitude': msg.location.latitude})
