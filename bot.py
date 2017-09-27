@@ -1,7 +1,10 @@
 import telebot
-from config import api_token
 from telebot import types
+from config import api_token
 from msg_consts import *
+
+from dbworker import Donor
+
 import re
 
 # TODO: хорошо бы тут всё закомментировать, а то я уже путаюсь
@@ -47,8 +50,8 @@ def add_back_to_main_inline(keyboard=None):
 @bot.callback_query_handler(func=lambda call: call.data == BACK_TO_MAIN)
 def main_handler(msg_call):
     chat_id = msg_call.chat.id if isinstance(msg_call, types.Message) else msg_call.message.chat.id
-    # TODO: Здесь должна быть проверка на зарегистрированность пользователя
-    donor_exist = False
+    # chat_id совпадает с TelegramID
+    donor_exist = Donor.try_exist(chat_id)
     keyboard = main_keyboard(not donor_exist)
     bot.send_message(chat_id, MAIN_MSG, reply_markup=keyboard)
 
@@ -118,14 +121,13 @@ def birth_handler(msg: types.Message):
         raw_birth_date = raw_birth_date.replace('/', '.')
         birth_date = datetime.datetime.strptime(raw_birth_date, '%d.%m.%Y').date()
         age = (datetime.date.today() - birth_date).days / 365
+        user_id = msg.chat.id
+        donor_exist = Donor.try_exist(user_id)
         # До 18 лет нельзя быть донором
-        # TODO: Здесь должна быть проверка на зарегистрированность пользователя
-        user_exist = False
         if age < 18:
             bot.send_message(msg.chat.id, AGE_YOUNG, reply_markup=main_keyboard(True))
-        if False:
-            # TODO: Здесь должно быть обновление даты рождения пользователя
-            user_id = msg.chat.id
+        if donor_exist:
+            Donor.update_with_data(user_id, {'birth_date': birth_date})
             # TODO: Продумать изменение предыдущего сообщения с инлайн-кнопками!
             bot.send_message(user_id,
                              BIRTH_CHANGE_SUCCESS,
@@ -162,11 +164,15 @@ def blood_type_handler(call: types.CallbackQuery):
 @bot.callback_query_handler(func=birth_bt_rh_data_check)
 def rh_factor_handler(call: types.CallbackQuery):
     # Разберём данные из кнопки
-    birth_dt, blood_type, rh = call.data.split(',')
-    birth_dt = birth_dt.split(':')[1]
-    blood_type = int(blood_type.split(':')[1])
-    rh = int(rh.split(':')[1])
-    # TODO: Здесь должен создаваться новый пользователь
+    raw_birth_dt, raw_blood_type, raw_rh = call.data.split(',')
+    birth_dt = raw_birth_dt.split(':')[1]
+    blood_type = int(raw_blood_type.split(':')[1])
+    rh = int(raw_rh.split(':')[1])
+    Donor.new_donor({'id': call.message.chat.id,
+                     'birth_date': birth_dt,
+                     'blood_type': blood_type,
+                     # В БД резус хранится в виде  TRUE (+), FALSE (-) и NULL (Не знаю)
+                     'rhesus': (False, True, None)[rh]})
     bot.edit_message_text(SUCCESS_REG,
                           call.message.chat.id,
                           call.message.message_id,
@@ -179,17 +185,14 @@ def rh_factor_handler(call: types.CallbackQuery):
 @bot.message_handler(regexp=EDIT_DONOR)
 def main_changer(msg: types.Message):
     change_list = types.InlineKeyboardMarkup()
-    # TODO: Здесь имеет смысл сделать запрос в БД за данными пользователя
-    # FIXME: Заглушка с данными
-    # Префикс с_ обозначает current (текущие) данные
-    user_raw_data = {'birth': 'dd.mm.yyyy',
-                     'bt': 1,
-                     'rh': 0}
+    user_raw_data = Donor.get_donor_data(msg.chat.id)
+    # Разберем сырые данные и выведем их в сообщении
     # Вместе с выводом пользовательских данных удалим клавиатуру главного меню
     bot.send_message(msg.chat.id,
-                     USER_INFO_TMPL.format(birth_fmt=user_raw_data['birth'],
-                                           bt_fmt=BLOOD_TYPES[user_raw_data['bt']],
-                                           rh_fmt=RH_TYPES[user_raw_data['rh']]),
+                     USER_INFO_TMPL.format(birth_fmt=user_raw_data[3].strftime('%d.%m.%Y'),
+                                           bt_fmt=BLOOD_TYPES[user_raw_data[1]],
+                                           # В БД резус хранится в виде  TRUE (+), FALSE (-) и NULL (Не знаю)
+                                           rh_fmt=RH_TYPES[{False: 0, True: 1, None: 2}[user_raw_data[2]]]),
                      reply_markup=types.ReplyKeyboardRemove())
     for inline_id, desc in MAIN_CHANGER[1:]:
         btn = types.InlineKeyboardButton(text=desc, callback_data=inline_id)
@@ -222,7 +225,7 @@ def bt_changer_handler(call: types.CallbackQuery):
 def blood_type_change_handler(call: types.CallbackQuery):
     user_id = call.message.chat.id
     blood_type = int(call.data.split(':')[1])
-    # TODO: Здесь должна быть запись в БД измененной группы крови
+    Donor.update_with_data(user_id, {'blood_type': blood_type})
     bot.send_message(user_id, BT_CHANGE_SUCCESS, reply_markup=main_keyboard())
 
 
@@ -247,7 +250,8 @@ def rh_changer_handler(call):
 def rh_factor_change_handler(call: types.CallbackQuery):
     user_id = call.message.chat.id
     rh = int(call.data.split(':')[1])
-    # TODO: Здесь должна быть запись в БД измененного резус-фактора
+    # В БД храним резус-фактор как TRUE (+), FALSE (-) и NULL (Не знаю)
+    Donor.update_with_data(user_id, {'rhesus': (False, True, None)[rh]})
     bot.send_message(user_id, RH_CHANGE_SUCCESS, reply_markup=main_keyboard())
 
 

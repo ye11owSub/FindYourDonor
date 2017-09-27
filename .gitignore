@@ -1,4 +1,6 @@
 # JetBrains IDE's files
 .idea
-
+config.py
+test.py
+db_creation.log
 __pycache__

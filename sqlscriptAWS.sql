@@ -1,8 +1,3 @@
---
--- Blood database creation script
---
-DROP DATABASE IF EXISTS "Blood";
-CREATE DATABASE "Blood" WITH TEMPLATE = template0 ENCODING = 'UTF8' LC_COLLATE = 'Russian_Russia.1251' LC_CTYPE = 'Russian_Russia.1251';
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -14,12 +9,12 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: Blood; Type: DATABASE; Schema: -; Owner: postgres
+-- Name: blood; Type: DATABASE; Schema: -; Owner: postgres
 --
 
-ALTER DATABASE "Blood" OWNER TO postgres;
+ALTER DATABASE "blood" OWNER TO Peaceart;
 
-\connect "Blood" 
+\connect "blood" 
 
 DROP SCHEMA public CASCADE;
 CREATE SCHEMA public;
