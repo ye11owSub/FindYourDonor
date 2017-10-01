@@ -3,12 +3,12 @@ from telebot import types
 from config import api_token
 from msg_consts import *
 
-from dbworker import Donor
+from dbworker import Donor, Request
 
 import re
 
 # TODO: хорошо бы тут всё закомментировать, а то я уже путаюсь
-# TODO: нужно добавить обработчики телефона и локации
+# TODO: стоит ли пересмотреть инлайн-данные: убрать префиксы birth, bt и rh, где ясна их позиция
 
 
 bot = telebot.TeleBot(api_token)
@@ -56,6 +56,19 @@ def add_back_to_main_inline(keyboard=None):
     back_btn = types.InlineKeyboardButton(TO_MAIN_MENU, callback_data=BACK_TO_MAIN)
     keyboard.add(back_btn)
     return keyboard
+
+
+@bot.message_handler(content_types=['location'])
+def geo_change_handler(msg: types.Message):
+    user_id = msg.chat.id
+    # В зависимости от сообщения, к которому будет прикреплено местоположение
+    # Будем считать, изменяется местоположения пользователя или заявки на поиск донора
+    if msg.reply_to_message and msg.reply_to_message.text == MAIN_MSG:
+        # Местоположение пользователя
+        Donor.update_with_data(user_id, {'longitude': msg.location.longitude,
+                                         'latitude': msg.location.latitude})
+        bot.send_message(user_id, GEO_USER_CHANGE_SUCCESS, reply_markup=types.ReplyKeyboardRemove())
+        bot.send_message(user_id, MAIN_MSG, reply_markup=main_keyboard())
 
 
 @bot.message_handler(commands=['start'])
@@ -167,12 +180,12 @@ def rh_factor_handler(call: types.CallbackQuery):
     raw_birth_dt, raw_blood_type, raw_rh = call.data.split(',')
     birth_dt = raw_birth_dt.split(':')[1]
     blood_type = int(raw_blood_type.split(':')[1])
-    rh = int(raw_rh.split(':')[1])
+    rh_factor = int(raw_rh.split(':')[1])
     Donor.new_donor({'id': call.message.chat.id,
                      'birth_date': birth_dt,
                      'blood_type': blood_type,
                      # В БД резус хранится в виде  TRUE (+), FALSE (-) и NULL (Не знаю)
-                     'rhesus': (False, True, None)[rh]})
+                     'rhesus': (False, True, None)[rh_factor]})
     bot.edit_message_text(SUCCESS_REG,
                           call.message.chat.id,
                           call.message.message_id,
@@ -272,17 +285,83 @@ def phone_change_handler(msg: types.Message):
     bot.send_message(user_id, MAIN_MSG, reply_markup=main_keyboard())
 
 
-@bot.message_handler(content_types=['location'])
-def geo_change_handler(msg: types.Message):
+# endregion
+
+
+# region: Обработчики сообщений по регистрации заявки на поиск доноров
+
+def rq_init_check(call):
+    return bool(re.match(RQ_INIT, call.data))
+
+
+def rq_bt_check(call):
+    return bool(re.match(RQ_BT_REGEXP, call.data))
+
+
+def rq_bt_rh_check(call):
+    return bool(re.match(RQ_BT_RH_REGEXP, call.data))
+
+
+@bot.message_handler(regexp=FIND_DONOR)
+def start_request_handler(msg: types.Message):
     user_id = msg.chat.id
-    # В зависимости от сообщения, к которому будет прикреплено местоположение
-    # Будем считать, изменяется местоположения пользователя или заявки на поиск донора
-    if msg.reply_to_message and msg.reply_to_message.text == MAIN_MSG:
-        # Местоположение пользователя
-        Donor.update_with_data(user_id, {'longitude': msg.location.longitude,
-                                         'latitude': msg.location.latitude})
-        bot.send_message(user_id, GEO_USER_CHANGE_SUCCESS, reply_markup=types.ReplyKeyboardRemove())
-        bot.send_message(user_id, MAIN_MSG, reply_markup=main_keyboard())
+    bot.send_message(user_id, MAIN_REQUEST, reply_markup=types.ReplyKeyboardRemove())
+    bop_keyboard = types.InlineKeyboardMarkup()
+    proceed_btn = types.InlineKeyboardButton(REQUEST_PROCEED, callback_data=RQ_INIT)
+    bop_keyboard.add(proceed_btn)
+    add_back_to_main_inline(bop_keyboard)
+    bot.send_message(user_id, BACK_OR_PROCEED, reply_markup=bop_keyboard)
+
+
+@bot.callback_query_handler(func=rq_init_check)
+def init_request_handler(call: types.CallbackQuery):
+    # Шаблон для инлайн-данных
+    inline_data_tmpl = 'rq!bt:{}'
+    blood_group_keyboard = types.InlineKeyboardMarkup()
+    for bt, desc in BLOOD_TYPES.items():
+        inline_data = inline_data_tmpl.format(bt)
+        btn = types.InlineKeyboardButton(text=desc, callback_data=inline_data)
+        blood_group_keyboard.add(btn)
+    add_back_to_main_inline(blood_group_keyboard)
+    bot.edit_message_text(RQ_CHOOSE_BT,
+                          call.message.chat.id,
+                          call.message.message_id,
+                          reply_markup=blood_group_keyboard)
+
+
+@bot.callback_query_handler(func=rq_bt_check)
+def bt_request_handler(call: types.CallbackQuery):
+    # Шаблон для инлайн-данных
+    inline_data_tmpl = '{},rh:{}'.format(call.data, '{}')
+    rh_keyboard = types.InlineKeyboardMarkup()
+    for rht, desc in RH_TYPES.items():
+        inline_data = inline_data_tmpl.format(rht)
+        btn = types.InlineKeyboardButton(text=desc, callback_data=inline_data)
+        rh_keyboard.add(btn)
+    add_back_to_main_inline(rh_keyboard)
+    bot.edit_message_text(RQ_CHOOSE_RH,
+                          call.message.chat.id,
+                          call.message.message_id,
+                          reply_markup=rh_keyboard)
+
+
+@bot.callback_query_handler(func=rq_bt_rh_check)
+def bt_rh_request_handler(call: types.CallbackQuery):
+    # Распарсим инлайн-данные
+    raw_bt, raw_rh = call.data.split('!')[1].split(',')
+    blood_type = int(raw_bt.split(':'))
+    rh_factor = int(raw_rh.split(':')[1])
+    # FIXME: Здесь нам обещали сделать upsert
+    Request.new_request({'user_id': call.message.chat.id,
+                         'need_blood_type': blood_type,
+                         # В БД резус хранится в виде  TRUE (+), FALSE (-) и NULL (Не знаю)
+                         'need_rhesus': (False, True, None)[rh_factor]})
+    bot.edit_message_text('Ну пока что всё, дальше будем обрабатывать геолокацию, комментарий и телефон.',
+                          call.message.chat.id,
+                          call.message.message_id,
+                          reply_markup=None)
+
+
 # endregion
 
 
