@@ -1,10 +1,12 @@
 import pg
 from helpers import load_config, create_query_text
-from config import connect_data
+from config import connect_data as CONFIG_PARAMS
 
 error_message = "Параметры указаны не верно"
+
+
 # CONFIG_PARAMS = load_config()
-CONFIG_PARAMS = connect_data
+
 
 
 class Donor:
@@ -93,15 +95,20 @@ class Request:
 
     @staticmethod
     def new_request(request_info: dict):
-        empty_exist = Request.empty_request(request_info["user_id"])
-        if empty_exist:
-            Request.update_request(request_info, empty_exist[0][0])
-            return empty_exist[0][0]  # возвращаю номер запроса
+        query_text = 'INSERT INTO "Request" ({columns}) VALUES ({values}) ON CONFLICT (request_id) DO UPDATE SET ({columns}) = ({values}) RETURNING request_id'
+        columns, values_len, values = create_query_text(request_info)
+        query = query_text.format(columns=columns, values=values_len)
+        with pg.DB(**CONFIG_PARAMS) as conn:
+            return conn.query(query, *values).getresult()[0][0]
 
-        else:
-            query_text = 'INSERT INTO "Request" ({columns}) VALUES ({values}) RETURNING request_id'
-            columns, values_len, values = create_query_text(request_info)
-            query = query_text.format(columns=columns, values=values_len)
-            with pg.DB(**CONFIG_PARAMS) as conn:
-                return conn.query(query, *values).getresult()[0][0]
-
+        # empty_exist = Request.empty_request(request_info["user_id"])
+        # if empty_exist:
+        #     Request.update_request(request_info, empty_exist[0][0])
+        #     return empty_exist[0][0]  # возвращаю номер запроса
+        #
+        # else:
+        #     query_text = 'INSERT INTO "Request" ({columns}) VALUES ({values}) RETURNING request_id'
+        #     columns, values_len, values = create_query_text(request_info)
+        #     query = query_text.format(columns=columns, values=values_len)
+        #     with pg.DB(**CONFIG_PARAMS) as conn:
+        #         return conn.query(query, *values).getresult()[0][0]

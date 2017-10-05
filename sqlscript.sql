@@ -47,11 +47,12 @@ CREATE TABLE public."Request" (
 	"need_blood_type" smallint,
 	"need_rhesus" boolean,
 	"message" text,
-	"post_date" timestamp,
+	"post_date" timestamp DEFAULT now(),
 	"longitude" real,
 	"latitude" real,
 	"registration_flag" boolean,
-	"send_flag" boolean
+	"send_flag" boolean,
+	PRIMARY KEY ("request_id")
 );
 
 SET client_encoding = 'UTF-8';
