@@ -94,7 +94,7 @@ class Request:
             conn.query(query, *values)
 
     @staticmethod
-    def new_request(request_info: dict):
+    def upsert_request(request_info: dict):
         query_text = 'INSERT INTO "Request" ({columns}) VALUES ({values}) ON CONFLICT (request_id) DO UPDATE SET ({columns}) = ({values}) RETURNING request_id'
         columns, values_len, values = create_query_text(request_info)
         query = query_text.format(columns=columns, values=values_len)
