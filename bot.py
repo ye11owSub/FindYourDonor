@@ -58,17 +58,31 @@ def add_back_to_main_inline(keyboard=None):
     return keyboard
 
 
+def reply_to_validation(msg: types.Message):
+    if msg.reply_to_message and msg.reply_to_message.text:
+        return msg.reply_to_message.text
+    return None
+
+
 @bot.message_handler(content_types=['location'])
 def geo_change_handler(msg: types.Message):
     user_id = msg.chat.id
     # В зависимости от сообщения, к которому будет прикреплено местоположение
     # Будем считать, изменяется местоположения пользователя или заявки на поиск донора
-    if msg.reply_to_message and msg.reply_to_message.text == MAIN_MSG:
+    replied_to = reply_to_validation(msg)
+    if replied_to == RQ_LOCATION_REPLY:
+        bot.send_message(user_id,
+                         '+',
+                         reply_markup=types.ReplyKeyboardRemove())
+        Request.new_request({'user_id': user_id,
+                             'longitude': msg.location.longitude,
+                             'latitude': msg.location.latitude})
+    else:
         # Местоположение пользователя
-        Donor.update_with_data(user_id, {'longitude': msg.location.longitude,
-                                         'latitude': msg.location.latitude})
         bot.send_message(user_id, GEO_USER_CHANGE_SUCCESS, reply_markup=types.ReplyKeyboardRemove())
         bot.send_message(user_id, MAIN_MSG, reply_markup=main_keyboard())
+        Donor.update_with_data(user_id, {'longitude': msg.location.longitude,
+                                         'latitude': msg.location.latitude})
 
 
 @bot.message_handler(commands=['start'])
@@ -290,6 +304,7 @@ def phone_change_handler(msg: types.Message):
 
 # region: Обработчики сообщений по регистрации заявки на поиск доноров
 
+
 def rq_init_check(call):
     return bool(re.match(RQ_INIT, call.data))
 
@@ -300,6 +315,10 @@ def rq_bt_check(call):
 
 def rq_bt_rh_check(call):
     return bool(re.match(RQ_BT_RH_REGEXP, call.data))
+
+
+def rq_comment_check(msg: types.Message):
+    return reply_to_validation(msg) == RQ_COMMENT_REPLY
 
 
 @bot.message_handler(regexp=FIND_DONOR)
@@ -349,18 +368,34 @@ def bt_request_handler(call: types.CallbackQuery):
 def bt_rh_request_handler(call: types.CallbackQuery):
     # Распарсим инлайн-данные
     raw_bt, raw_rh = call.data.split('!')[1].split(',')
-    blood_type = int(raw_bt.split(':'))
+    blood_type = int(raw_bt.split(':')[1])
     rh_factor = int(raw_rh.split(':')[1])
     # FIXME: Здесь нам обещали сделать upsert
     Request.new_request({'user_id': call.message.chat.id,
                          'need_blood_type': blood_type,
                          # В БД резус хранится в виде  TRUE (+), FALSE (-) и NULL (Не знаю)
                          'need_rhesus': (False, True, None)[rh_factor]})
-    bot.edit_message_text('Ну пока что всё, дальше будем обрабатывать геолокацию, комментарий и телефон.',
+    bot.edit_message_text(RQ_COMMENT_REQUIRE,
                           call.message.chat.id,
                           call.message.message_id,
-                          reply_markup=None)
+                          reply_markup=add_back_to_main_inline(),
+                          )
+    bot.send_message(call.message.chat.id,
+                     RQ_COMMENT_REPLY,
+                     reply_markup=types.ForceReply())
 
+
+@bot.message_handler(func=rq_comment_check)
+def comment_handler(msg: types.Message):
+    bot.send_message(msg.chat.id,
+                     RQ_LOCATION_REQUIRE,
+                     parse_mode='Markdown',  # т.к в данном сообщении используется разметка, используем эту опцию
+                     reply_markup=add_back_to_main_inline())
+    bot.send_message(msg.chat.id,
+                     RQ_LOCATION_REPLY,
+                     reply_markup=add_geophone_keyboard(phone=False))
+    Request.new_request({'user_id': msg.chat.id,
+                         'message': msg.text})
 
 # endregion
 
