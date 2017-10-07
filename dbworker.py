@@ -78,28 +78,29 @@ class Request:
 	"send_flag" boolean
     """
 
-    @staticmethod
-    def empty_request(user_id):
-        query_text = 'SELECT "request_id" FROM "Request" WHERE "user_id"= $1 AND "registration_flag"=False'
-        with pg.DB(**CONFIG_PARAMS) as conn:
-            return conn.query(query_text, user_id).getresult()  # проверяй массив на пустоту для ответа
+    # @staticmethod
+    # def empty_request(user_id):
+    #     query_text = 'SELECT "request_id" FROM "Request" WHERE "user_id"= $1 AND "registration_flag" is False'
+    #     with pg.DB(**CONFIG_PARAMS) as conn:
+    #         return conn.query(query_text, user_id).getresult()  # проверяй массив на пустоту для ответа
 
     @staticmethod
-    def update_request(request_info, request_id):
-        query_text = 'UPDATE "Request" SET ({columns}) = ({values}) WHERE "request_id" = ${request_param}'
+    def update_request(request_info, user_id):
+        query_text = 'UPDATE "Request" SET ({columns}) = ({values}) WHERE "user_id" = ${user_id} AND "registration_flag" Is FALSE'
         columns, values_len, values = create_query_text(request_info)
-        values.append(request_id)
-        query = query_text.format(columns=columns, values=values_len, request_param=len(values))
+        values.append(user_id)
+        query = query_text.format(columns=columns, values=values_len, user_id=len(values))
+        print(query)
         with pg.DB(**CONFIG_PARAMS) as conn:
             conn.query(query, *values)
 
     @staticmethod
-    def new_request(request_info: dict):
-        query_text = 'INSERT INTO "Request" ({columns}) VALUES ({values}) ON CONFLICT (request_id) DO UPDATE SET ({columns}) = ({values}) RETURNING request_id'
+    def upsert_request(request_info: dict):
+        query_text = 'INSERT INTO "Request" ({columns}) VALUES ({values}) ON CONFLICT ("user_id") WHERE "registration_flag" Is FALSE DO UPDATE SET ({columns}) = ({values})'
         columns, values_len, values = create_query_text(request_info)
         query = query_text.format(columns=columns, values=values_len)
         with pg.DB(**CONFIG_PARAMS) as conn:
-            return conn.query(query, *values).getresult()[0][0]
+            conn.query(query, *values)
 
         # empty_exist = Request.empty_request(request_info["user_id"])
         # if empty_exist:
