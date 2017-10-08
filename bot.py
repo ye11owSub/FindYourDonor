@@ -72,11 +72,18 @@ def geo_change_handler(msg: types.Message):
     replied_to = reply_to_validation(msg)
     if replied_to == RQ_LOCATION_REPLY:
         bot.send_message(user_id,
-                         '+',
-                         reply_markup=types.ReplyKeyboardRemove())
-        Request.new_request({'user_id': user_id,
-                             'longitude': msg.location.longitude,
-                             'latitude': msg.location.latitude})
+                         RQ_PHONE_REQUIRE,
+                         reply_markup=add_back_to_main_inline())
+        Request.update_request({'longitude': msg.location.longitude,
+                                'latitude': msg.location.latitude},
+                               user_id)
+        rq_phone_keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+        add_geophone_keyboard(rq_phone_keyboard, geo=False)
+        skip_button = types.KeyboardButton(RQ_SKIP_PHONE)
+        rq_phone_keyboard.add(skip_button)
+        bot.send_message(user_id,
+                         RQ_PHONE_ACTIONS,
+                         reply_markup=rq_phone_keyboard)
     else:
         # Местоположение пользователя
         bot.send_message(user_id, GEO_USER_CHANGE_SUCCESS, reply_markup=types.ReplyKeyboardRemove())
@@ -283,22 +290,6 @@ def rh_factor_change_handler(call: types.CallbackQuery):
     Donor.update_with_data(user_id, {'rhesus': (False, True, None)[rh]})
 
 
-@bot.message_handler(content_types=['contact'])
-def phone_change_handler(msg: types.Message):
-    user_id = msg.chat.id
-    # TODO: Здесь необходимо получать незаполненную заявку пользователя
-    if msg.contact.user_id:
-        if user_id != msg.contact.user_id:
-            bot.send_message(user_id, PHONE_CHANGE_CHEATING, reply_markup=types.ReplyKeyboardRemove())
-        else:
-            bot.send_message(user_id, PHONE_CHANGE_SUCCESS, reply_markup=types.ReplyKeyboardRemove())
-            # TODO: Здесь необходимо обновить телефон в заявке
-
-    else:
-        bot.send_message(user_id, PHONE_CHANGE_NEED_TELEGRAM, reply_markup=types.ReplyKeyboardRemove())
-    bot.send_message(user_id, MAIN_MSG, reply_markup=main_keyboard())
-
-
 # endregion
 
 
@@ -306,7 +297,7 @@ def phone_change_handler(msg: types.Message):
 
 
 def rq_init_check(call):
-    return bool(re.match(RQ_INIT, call.data))
+    return call.data == RQ_INIT
 
 
 def rq_bt_check(call):
@@ -319,6 +310,27 @@ def rq_bt_rh_check(call):
 
 def rq_comment_check(msg: types.Message):
     return reply_to_validation(msg) == RQ_COMMENT_REPLY
+
+
+def rq_phone_skip_check(msg: types.Message):
+    return msg.text == RQ_SKIP_PHONE
+
+
+def rq_applied(call: types.CallbackQuery):
+    return call.data == RQ_APPLY
+
+
+def rq_phone_try_again(user_id):
+    bot.send_message(user_id,
+                     RQ_PHONE_TRY_AGAIN,
+                     reply_markup=add_back_to_main_inline())
+    rq_phone_keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+    add_geophone_keyboard(rq_phone_keyboard, geo=False)
+    skip_button = types.KeyboardButton(RQ_SKIP_PHONE)
+    rq_phone_keyboard.add(skip_button)
+    bot.send_message(user_id,
+                     RQ_PHONE_ACTIONS,
+                     reply_markup=rq_phone_keyboard)
 
 
 @bot.message_handler(regexp=FIND_DONOR)
@@ -370,11 +382,10 @@ def bt_rh_request_handler(call: types.CallbackQuery):
     raw_bt, raw_rh = call.data.split('!')[1].split(',')
     blood_type = int(raw_bt.split(':')[1])
     rh_factor = int(raw_rh.split(':')[1])
-    # FIXME: Здесь нам обещали сделать upsert
-    Request.new_request({'user_id': call.message.chat.id,
-                         'need_blood_type': blood_type,
-                         # В БД резус хранится в виде  TRUE (+), FALSE (-) и NULL (Не знаю)
-                         'need_rhesus': (False, True, None)[rh_factor]})
+    Request.upsert_request({'user_id': call.message.chat.id,
+                            'need_blood_type': blood_type,
+                            # В БД резус хранится в виде  TRUE (+), FALSE (-) и NULL (Не знаю)
+                            'need_rhesus': (False, True, None)[rh_factor]})
     bot.edit_message_text(RQ_COMMENT_REQUIRE,
                           call.message.chat.id,
                           call.message.message_id,
@@ -386,7 +397,7 @@ def bt_rh_request_handler(call: types.CallbackQuery):
 
 
 @bot.message_handler(func=rq_comment_check)
-def comment_handler(msg: types.Message):
+def comment_request_handler(msg: types.Message):
     bot.send_message(msg.chat.id,
                      RQ_LOCATION_REQUIRE,
                      parse_mode='Markdown',  # т.к в данном сообщении используется разметка, используем эту опцию
@@ -394,9 +405,61 @@ def comment_handler(msg: types.Message):
     bot.send_message(msg.chat.id,
                      RQ_LOCATION_REPLY,
                      reply_markup=add_geophone_keyboard(phone=False))
-    Request.new_request({'user_id': msg.chat.id,
-                         'message': msg.text})
+    Request.update_request({'message': msg.text}, msg.chat.id)
 
+
+@bot.message_handler(content_types=['contact'])
+def phone_request_handler(msg: types.Message):
+    user_id = msg.chat.id
+    if msg.contact.user_id:
+        if user_id != msg.contact.user_id:
+            bot.send_message(user_id, RQ_PHONE_CHEATING, reply_markup=types.ReplyKeyboardRemove())
+            rq_phone_try_again(user_id)
+        else:
+            bot.send_message(user_id, RQ_PHONE_SUCCESS, reply_markup=types.ReplyKeyboardRemove())
+            Request.update_request({'phone_number': msg.contact.phone}, user_id)
+            # Инлайн-клавиатура с кнопкой применения изменения
+            # TODO: Возможно стоит сделать здесь предпросмотр заявки
+            search_apply_keyboard = types.InlineKeyboardMarkup()
+            rq_apply_button = types.InlineKeyboardButton(RQ_START_DONOR_SEARCH,
+                                                         callback_data=RQ_APPLY)
+            search_apply_keyboard.add(rq_apply_button)
+            add_back_to_main_inline(search_apply_keyboard)
+            bot.send_message(user_id, RQ_FINAL_STEP, reply_markup=search_apply_keyboard)
+
+    else:
+        bot.send_message(user_id, RQ_PHONE_NEED_TELEGRAM, reply_markup=types.ReplyKeyboardRemove())
+    rq_phone_try_again(user_id)
+
+
+@bot.message_handler(regexp=RQ_SKIP_PHONE)
+def skip_phone_request_handler(msg: types.Message):
+    user_id = msg.chat.id
+    bot.send_message(user_id, RQ_PHONE_SKIPPED, reply_markup=types.ReplyKeyboardRemove())
+    # Инлайн-клавиатура с кнопкой применения изменения
+    # TODO: Возможно стоит сделать здесь предпросмотр заявки
+    search_apply_keyboard = types.InlineKeyboardMarkup()
+    rq_apply_button = types.InlineKeyboardButton(RQ_START_DONOR_SEARCH,
+                                                 callback_data=RQ_APPLY)
+    search_apply_keyboard.add(rq_apply_button)
+    add_back_to_main_inline(search_apply_keyboard)
+    bot.send_message(user_id, RQ_FINAL_STEP, reply_markup=search_apply_keyboard)
+
+
+@bot.callback_query_handler(func=rq_applied)
+def apply_request_handler(call: types.CallbackQuery):
+    user_id = call.message.chat.id
+    bot.edit_message_text(RQ_SEARCH_START,
+                          user_id,
+                          call.message.message_id,
+                          reply_markup=types.ReplyKeyboardRemove())
+    Request.update_request({'registration_flag': True}, user_id)
+    bot.send_message(user_id,
+                     RQ_SEARCH_START,
+                     reply_markup=types.ReplyKeyboardRemove())
+    bot.send_message(user_id,
+                     MAIN_MSG,
+                     reply_markup=main_keyboard(Donor.try_exist(user_id)))
 # endregion
 
 
