@@ -14,7 +14,7 @@ import re
 bot = telebot.TeleBot(api_token)
 
 
-def add_geophone_keyboard(keyboard=None, phone=True, geo=True):
+def add_geophone_keyboard(keyboard=None, phone=False, geo=False):
     if not keyboard:
         keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
     if phone:
@@ -36,8 +36,6 @@ def main_keyboard(need_reg=False):
     keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
     keyboard.add(NEW_DONOR if need_reg else EDIT_DONOR,
                  FIND_DONOR)
-    if not need_reg:
-        add_geophone_keyboard(keyboard, phone=False)
     return keyboard
 
 
@@ -47,8 +45,6 @@ def add_back_to_main_inline(keyboard=None):
     в отправляемую клавиатуру сообщения и возвращает ее
     :param keyboard: передаваемая клавиатура
     :type keyboard: InlineKeyboardMarkup
-    :param need_reg: в главное меню с кнопкой регистрации / без
-    :type need_reg: bool
     :return: InlineKeyboardMarkup
     """
     if not keyboard:
@@ -70,7 +66,7 @@ def geo_change_handler(msg: types.Message):
     # В зависимости от сообщения, к которому будет прикреплено местоположение
     # Будем считать, изменяется местоположения пользователя или заявки на поиск донора
     replied_to = reply_to_validation(msg)
-    if replied_to == RQ_LOCATION_REPLY:
+    if replied_to == RQ_GEO_REPLY:
         bot.send_message(user_id,
                          RQ_PHONE_REQUIRE,
                          reply_markup=add_back_to_main_inline())
@@ -78,12 +74,18 @@ def geo_change_handler(msg: types.Message):
                                 'latitude': msg.location.latitude},
                                user_id)
         rq_phone_keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
-        add_geophone_keyboard(rq_phone_keyboard, geo=False)
+        add_geophone_keyboard(rq_phone_keyboard, phone=True)
         skip_button = types.KeyboardButton(RQ_SKIP_PHONE)
         rq_phone_keyboard.add(skip_button)
         bot.send_message(user_id,
                          RQ_PHONE_ACTIONS,
                          reply_markup=rq_phone_keyboard)
+    elif replied_to == REG_GEO_REPLY:
+        bot.send_message(user_id,
+                         SUCCESS_REG,
+                         reply_markup=main_keyboard())
+        Donor.update_with_data(user_id, {'longitude': msg.location.longitude,
+                                         'latitude': msg.location.latitude})
     else:
         # Местоположение пользователя
         bot.send_message(user_id, GEO_USER_CHANGE_SUCCESS, reply_markup=types.ReplyKeyboardRemove())
@@ -95,11 +97,18 @@ def geo_change_handler(msg: types.Message):
 @bot.message_handler(commands=['start'])
 @bot.callback_query_handler(func=lambda call: call.data == BACK_TO_MAIN)
 def main_handler(msg_call):
-    chat_id = msg_call.chat.id if isinstance(msg_call, types.Message) else msg_call.message.chat.id
+    user_id = None
+    if isinstance(msg_call, types.CallbackQuery):
+        bot.edit_message_text(BACK_TO_MAIN_DECISION,
+                              msg_call.message.chat.id,
+                              msg_call.message.message_id)
+        user_id = msg_call.message.chat.id
+    else:
+        user_id = msg_call.chat.id
     # chat_id совпадает с TelegramID
-    donor_exist = Donor.try_exist(chat_id)
+    donor_exist = Donor.try_exist(user_id)
     keyboard = main_keyboard(not donor_exist)
-    bot.send_message(chat_id, MAIN_MSG, reply_markup=keyboard)
+    bot.send_message(user_id, MAIN_MSG, reply_markup=keyboard)
 
 
 # region: Обработчики сообщений по регистрации / изменению данных донора
@@ -130,6 +139,10 @@ def bt_changer(call):
 
 def rh_changer(call):
     return bool(re.match(RH_CHANGER_REGEXP, call.data))
+
+
+def geo_changer(call):
+    return bool(re.match(GEO_CHANGER_REGEXP, call.data))
 
 
 @bot.message_handler(regexp=NEW_DONOR)
@@ -207,13 +220,14 @@ def rh_factor_handler(call: types.CallbackQuery):
                      'blood_type': blood_type,
                      # В БД резус хранится в виде  TRUE (+), FALSE (-) и NULL (Не знаю)
                      'rhesus': (False, True, None)[rh_factor]})
-    bot.edit_message_text(SUCCESS_REG,
+    bot.edit_message_text(REG_GEO_REQUIRE,
                           call.message.chat.id,
                           call.message.message_id,
+                          parse_mode='Markdown',  # т.к в данном сообщении используется разметка, используем эту опцию
                           reply_markup=None)
     bot.send_message(call.message.chat.id,
-                     NEED_GEOPHONE,
-                     reply_markup=main_keyboard())
+                     REG_GEO_REPLY,
+                     reply_markup=add_geophone_keyboard(geo=True))
 
 
 @bot.message_handler(regexp=EDIT_DONOR)
@@ -280,6 +294,18 @@ def rh_changer_handler(call):
                           reply_markup=rh_keyboard)
 
 
+@bot.callback_query_handler(func=geo_changer)
+def geo_changer_handler(call):
+    bot.edit_message_text(GEO_INFO,
+                          call.message.chat.id,
+                          call.message.message_id,
+                          parse_mode='Markdown',  # т.к в данном сообщении используется разметка, используем эту опцию
+                          reply_markup=add_back_to_main_inline())
+    bot.send_message(call.message.chat.id,
+                     GEO_CHANGE_REPLY,
+                     reply_markup=add_geophone_keyboard(geo=True))
+
+
 @bot.callback_query_handler(func=rh_data_change_check)
 def rh_factor_change_handler(call: types.CallbackQuery):
     user_id = call.message.chat.id
@@ -325,7 +351,7 @@ def rq_phone_try_again(user_id):
                      RQ_PHONE_TRY_AGAIN,
                      reply_markup=add_back_to_main_inline())
     rq_phone_keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
-    add_geophone_keyboard(rq_phone_keyboard, geo=False)
+    add_geophone_keyboard(rq_phone_keyboard, phone=True)
     skip_button = types.KeyboardButton(RQ_SKIP_PHONE)
     rq_phone_keyboard.add(skip_button)
     bot.send_message(user_id,
@@ -399,12 +425,12 @@ def bt_rh_request_handler(call: types.CallbackQuery):
 @bot.message_handler(func=rq_comment_check)
 def comment_request_handler(msg: types.Message):
     bot.send_message(msg.chat.id,
-                     RQ_LOCATION_REQUIRE,
+                     RQ_GEO_REQUIRE,
                      parse_mode='Markdown',  # т.к в данном сообщении используется разметка, используем эту опцию
                      reply_markup=add_back_to_main_inline())
     bot.send_message(msg.chat.id,
-                     RQ_LOCATION_REPLY,
-                     reply_markup=add_geophone_keyboard(phone=False))
+                     RQ_GEO_REPLY,
+                     reply_markup=add_geophone_keyboard(geo=True))
     Request.update_request({'message': msg.text}, msg.chat.id)
 
 
@@ -417,7 +443,7 @@ def phone_request_handler(msg: types.Message):
             rq_phone_try_again(user_id)
         else:
             bot.send_message(user_id, RQ_PHONE_SUCCESS, reply_markup=types.ReplyKeyboardRemove())
-            Request.update_request({'phone_number': msg.contact.phone}, user_id)
+            Request.update_request({'phone_number': msg.contact.phone_number}, user_id)
             # Инлайн-клавиатура с кнопкой применения изменения
             # TODO: Возможно стоит сделать здесь предпросмотр заявки
             search_apply_keyboard = types.InlineKeyboardMarkup()
@@ -429,7 +455,7 @@ def phone_request_handler(msg: types.Message):
 
     else:
         bot.send_message(user_id, RQ_PHONE_NEED_TELEGRAM, reply_markup=types.ReplyKeyboardRemove())
-    rq_phone_try_again(user_id)
+        rq_phone_try_again(user_id)
 
 
 @bot.message_handler(regexp=RQ_SKIP_PHONE)
@@ -452,14 +478,12 @@ def apply_request_handler(call: types.CallbackQuery):
     bot.edit_message_text(RQ_SEARCH_START,
                           user_id,
                           call.message.message_id,
-                          reply_markup=types.ReplyKeyboardRemove())
+                          reply_markup=None)
     Request.update_request({'registration_flag': True}, user_id)
-    bot.send_message(user_id,
-                     RQ_SEARCH_START,
-                     reply_markup=types.ReplyKeyboardRemove())
+    donor_exist = Donor.try_exist(user_id)
     bot.send_message(user_id,
                      MAIN_MSG,
-                     reply_markup=main_keyboard(Donor.try_exist(user_id)))
+                     reply_markup=main_keyboard(not donor_exist))
 # endregion
 
 
