@@ -1,6 +1,10 @@
 # JetBrains IDE's files
 .idea
+
+# Service files
 config.py
 test.py
 db_creation.log
+
+# pycache dir
 __pycache__

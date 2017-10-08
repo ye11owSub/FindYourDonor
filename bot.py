@@ -1,4 +1,4 @@
-import telebot
+from llibs import telebot
 from telebot import types
 from config import api_token
 from msg_consts import *
