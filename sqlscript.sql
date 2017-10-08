@@ -50,10 +50,9 @@ CREATE TABLE public."Request" (
 	"post_date" timestamp DEFAULT now(),
 	"longitude" real,
 	"latitude" real,
-	"registration_flag" boolean,
-	"send_flag" boolean,
-	PRIMARY KEY ("request_id")
+	"registration_flag" boolean DEFAULT FALSE ,
+	"send_flag" boolean DEFAULT FALSE
 );
 
+CREATE UNIQUE INDEX not_fillin ON "Request" ("user_id") WHERE "registration_flag" Is FALSE ;
 SET client_encoding = 'UTF-8';
-
