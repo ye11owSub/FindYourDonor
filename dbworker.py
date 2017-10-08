@@ -1,12 +1,11 @@
-import pg
-from helpers import load_config, create_query_text
+from llibs import pg
+from helpers import create_query_text
 from config import connect_data as CONFIG_PARAMS
 
 error_message = "Параметры указаны не верно"
 
 
 # CONFIG_PARAMS = load_config()
-
 
 
 class Donor:
@@ -66,16 +65,16 @@ class Request:
     """
     Поля таблицы:
     "request_id" smallserial,
-	"user_id" int,
-	"phone_number" text,
-	"need_blood_type" smallint,
-	"need_rhesus" boolean,
-	"message" text,
-	"post_date" timestamp,
-	"longitude" real,
-	"latitude" real,
-	"registration_flag" boolean,
-	"send_flag" boolean
+    "user_id" int,
+    "phone_number" text,
+    "need_blood_type" smallint,
+    "need_rhesus" boolean,
+    "message" text,
+    "post_date" timestamp,
+    "longitude" real,
+    "latitude" real,
+    "registration_flag" boolean,
+    "send_flag" boolean
     """
 
     # @staticmethod
@@ -86,7 +85,12 @@ class Request:
 
     @staticmethod
     def update_request(request_info, user_id):
-        query_text = 'UPDATE "Request" SET ({columns}) = ({values}) WHERE "user_id" = ${user_id} AND "registration_flag" Is FALSE'
+        query_text = '''
+        UPDATE "Request"
+        SET ({columns}) = ({values})
+        WHERE "user_id" = ${user_id}
+        AND "registration_flag" Is FALSE
+        '''
         columns, values_len, values = create_query_text(request_info)
         values.append(user_id)
         query = query_text.format(columns=columns, values=values_len, user_id=len(values))
@@ -96,20 +100,25 @@ class Request:
 
     @staticmethod
     def upsert_request(request_info: dict):
-        query_text = 'INSERT INTO "Request" ({columns}) VALUES ({values}) ON CONFLICT ("user_id") WHERE "registration_flag" Is FALSE DO UPDATE SET ({columns}) = ({values})'
+        query_text = '''
+        INSERT INTO "Request" ({columns})
+        VALUES ({values})
+        ON CONFLICT ("user_id")
+        WHERE "registration_flag" Is FALSE
+        DO UPDATE SET ({columns}) = ({values})'''
         columns, values_len, values = create_query_text(request_info)
         query = query_text.format(columns=columns, values=values_len)
         with pg.DB(**CONFIG_PARAMS) as conn:
             conn.query(query, *values)
 
-        # empty_exist = Request.empty_request(request_info["user_id"])
-        # if empty_exist:
-        #     Request.update_request(request_info, empty_exist[0][0])
-        #     return empty_exist[0][0]  # возвращаю номер запроса
-        #
-        # else:
-        #     query_text = 'INSERT INTO "Request" ({columns}) VALUES ({values}) RETURNING request_id'
-        #     columns, values_len, values = create_query_text(request_info)
-        #     query = query_text.format(columns=columns, values=values_len)
-        #     with pg.DB(**CONFIG_PARAMS) as conn:
-        #         return conn.query(query, *values).getresult()[0][0]
+            # empty_exist = Request.empty_request(request_info["user_id"])
+            # if empty_exist:
+            #     Request.update_request(request_info, empty_exist[0][0])
+            #     return empty_exist[0][0]  # возвращаю номер запроса
+            #
+            # else:
+            #     query_text = 'INSERT INTO "Request" ({columns}) VALUES ({values}) RETURNING request_id'
+            #     columns, values_len, values = create_query_text(request_info)
+            #     query = query_text.format(columns=columns, values=values_len)
+            #     with pg.DB(**CONFIG_PARAMS) as conn:
+            #         return conn.query(query, *values).getresult()[0][0]
