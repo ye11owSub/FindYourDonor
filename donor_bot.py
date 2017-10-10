@@ -1,10 +1,3 @@
-# region: Добавление пути поиска модулей
-import sys
-from os.path import realpath, dirname, join
-libs_path = join(dirname(realpath(__file__)), 'llibs')
-sys.path.append(libs_path)
-# endregion
-
 from llibs import telebot
 from llibs.telebot import types
 from config import api_token
@@ -13,7 +6,7 @@ from msg_consts import *
 from dbworker import Donor, Request
 
 import re
-import json
+from json import dumps as js
 
 # TODO: хорошо бы тут всё закомментировать, а то я уже путаюсь
 # TODO: стоит ли пересмотреть инлайн-данные: убрать префиксы birth, bt и rh, где ясна их позиция
@@ -495,6 +488,8 @@ def apply_request_handler(call: types.CallbackQuery):
 # endregion
 
 
-def ep(content):
-    print(type(content))
-    bot.process_new_updates([telebot.types.Update.de_json(json.dumps(content))])
+def ep(new_update, context):
+    """Точка входа для AWS Lambda"""
+    # FIXME: как избавиться от перевода в json строку и обратно?
+    # Нужно избавиться от лишнего импорта json-а
+    bot.process_new_updates([types.Update.de_json(js(new_update))])

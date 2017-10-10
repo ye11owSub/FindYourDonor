@@ -8,3 +8,6 @@ db_creation.log
 
 # pycache dir
 __pycache__
+
+# lambda package
+*.zip
