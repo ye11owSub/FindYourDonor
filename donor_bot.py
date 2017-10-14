@@ -9,7 +9,7 @@ import re
 from json import dumps as js
 
 # TODO: хорошо бы тут всё закомментировать, а то я уже путаюсь
-# TODO: стоит ли пересмотреть инлайн-данные: убрать префиксы birth, bt и rh, где ясна их позиция
+# TODO: стоит ли пересмотреть инлайн-данные: убрать префиксы bt и rh, где ясна их позиция
 
 
 bot = telebot.TeleBot(api_token, threaded=False)
@@ -114,12 +114,12 @@ def main_handler(msg_call):
 
 # region: Обработчики сообщений по регистрации / изменению данных донора
 
-def birth_bt_data_check(call):
-    return bool(re.match(DATE_BT_DATA_REGEXP, call.data))
+def bt_data_check(call):
+    return bool(re.match(BT_DATA_REGEXP, call.data))
 
 
-def birth_bt_rh_data_check(call):
-    return bool(re.match(DATE_BT_RH_DATA_REGEXP, call.data))
+def bt_rh_data_check(call):
+    return bool(re.match(BT_RH_DATA_REGEXP, call.data))
 
 
 def bt_data_change_check(call):
@@ -128,10 +128,6 @@ def bt_data_change_check(call):
 
 def rh_data_change_check(call):
     return bool(re.match(RH_DATA_CHANGE_REGEXP, call.data))
-
-
-def birth_changer(call):
-    return bool(re.match(BIRTH_CHANGER_REGEXP, call.data))
 
 
 def bt_changer(call):
@@ -149,52 +145,17 @@ def geo_changer(call):
 @bot.message_handler(regexp=NEW_DONOR)
 def start_reg_handler(msg: types.Message):
     bot.send_message(msg.chat.id, START_REG, reply_markup=types.ReplyKeyboardRemove())
-    bot.send_message(msg.chat.id, HOW_OLD, reply_markup=add_back_to_main_inline())
+    inline_data_tmpl = 'bt:{}'
+    blood_group_keyboard = types.InlineKeyboardMarkup()
+    for bt, desc in BLOOD_TYPES.items():
+        inline_data = inline_data_tmpl.format(bt)
+        btn = types.InlineKeyboardButton(text=desc, callback_data=inline_data)
+        blood_group_keyboard.add(btn)
+    add_back_to_main_inline(blood_group_keyboard)
+    bot.send_message(msg.chat.id, text=CHOOSE_BLOOD_TYPE, reply_markup=blood_group_keyboard)
 
 
-@bot.callback_query_handler(func=birth_changer)
-def birth_changer_handler(call: types.CallbackQuery):
-    bot.edit_message_text(HOW_OLD,
-                          call.message.chat.id,
-                          call.message.message_id,
-                          reply_markup=add_back_to_main_inline())
-
-
-@bot.message_handler(regexp=DATE_REGEXP)
-def birth_handler(msg: types.Message):
-    """Функция, обрабатывающая дату рождения пользователя"""
-    import datetime
-    raw_birth_date = msg.text
-    try:
-        raw_birth_date = raw_birth_date.replace('/', '.')
-        birth_date = datetime.datetime.strptime(raw_birth_date, '%d.%m.%Y').date()
-        age = (datetime.date.today() - birth_date).days / 365
-        user_id = msg.chat.id
-        donor_exist = Donor.try_exist(user_id)
-        # До 18 лет нельзя быть донором
-        if age < 18:
-            bot.send_message(msg.chat.id, AGE_YOUNG, reply_markup=main_keyboard(True))
-        if donor_exist:
-            Donor.update_with_data(user_id, {'birth_date': birth_date})
-            # TODO: Продумать изменение предыдущего сообщения с инлайн-кнопками!
-            bot.send_message(user_id,
-                             BIRTH_CHANGE_SUCCESS,
-                             reply_markup=main_keyboard())
-        else:
-            blood_group_keyboard = types.InlineKeyboardMarkup()
-            # Запишем возраст в inline-кнопку
-            inline_data_tmpl = 'birth:{},bt:{}'.format(raw_birth_date, '{}')
-            for bt, desc in BLOOD_TYPES.items():
-                inline_data = inline_data_tmpl.format(bt)
-                btn = types.InlineKeyboardButton(text=desc, callback_data=inline_data)
-                blood_group_keyboard.add(btn)
-            add_back_to_main_inline(blood_group_keyboard)
-            bot.send_message(msg.chat.id, text=CHOOSE_BLOOD_TYPE, reply_markup=blood_group_keyboard)
-    except ValueError:
-        bot.send_message(msg.chat.id, text=BIRTH_DATE_ERROR, reply_markup=add_back_to_main_inline())
-
-
-@bot.callback_query_handler(func=birth_bt_data_check)
+@bot.callback_query_handler(func=bt_data_check)
 def blood_type_handler(call: types.CallbackQuery):
     inline_data_tmpl = '{},rh:{}'.format(call.data, '{}')
     rh_keyboard = types.InlineKeyboardMarkup()
@@ -209,15 +170,13 @@ def blood_type_handler(call: types.CallbackQuery):
                           reply_markup=rh_keyboard)
 
 
-@bot.callback_query_handler(func=birth_bt_rh_data_check)
+@bot.callback_query_handler(func=bt_rh_data_check)
 def rh_factor_handler(call: types.CallbackQuery):
     # Разберём данные из кнопки
-    raw_birth_dt, raw_blood_type, raw_rh = call.data.split(',')
-    birth_dt = raw_birth_dt.split(':')[1]
+    raw_blood_type, raw_rh = call.data.split(',')
     blood_type = int(raw_blood_type.split(':')[1])
     rh_factor = int(raw_rh.split(':')[1])
     Donor.new_donor({'id': call.message.chat.id,
-                     'birth_date': birth_dt,
                      'blood_type': blood_type,
                      # В БД резус хранится в виде  TRUE (+), FALSE (-) и NULL (Не знаю)
                      'rhesus': (False, True, None)[rh_factor]})
@@ -238,8 +197,7 @@ def main_changer(msg: types.Message):
     # Разберем сырые данные и выведем их в сообщении
     # Вместе с выводом пользовательских данных удалим клавиатуру главного меню
     bot.send_message(msg.chat.id,
-                     USER_INFO_TMPL.format(birth_fmt=user_raw_data[3].strftime('%d.%m.%Y'),
-                                           bt_fmt=BLOOD_TYPES[user_raw_data[1]],
+                     USER_INFO_TMPL.format(bt_fmt=BLOOD_TYPES[user_raw_data[1]],
                                            # В БД резус хранится в виде  TRUE (+), FALSE (-) и NULL (Не знаю)
                                            rh_fmt=RH_TYPES[{False: 0, True: 1, None: 2}[user_raw_data[2]]]),
                      reply_markup=types.ReplyKeyboardRemove())
