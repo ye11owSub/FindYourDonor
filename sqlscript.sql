@@ -34,7 +34,6 @@ CREATE TABLE "Donor"(
 	"id" int,
 	"blood_type" smallint,
 	"rhesus" boolean,
-	"birth_date" date,
 	"longitude" real,
 	"latitude" real
 	
