@@ -109,7 +109,6 @@ class Request:
         query = query_text.format(columns=columns, values=values_len)
         with pg.DB(**CONFIG_PARAMS) as conn:
             conn.query(query, *values)
-
             # empty_exist = Request.empty_request(request_info["user_id"])
             # if empty_exist:
             #     Request.update_request(request_info, empty_exist[0][0])
@@ -121,3 +120,15 @@ class Request:
             #     query = query_text.format(columns=columns, values=values_len)
             #     with pg.DB(**CONFIG_PARAMS) as conn:
             #         return conn.query(query, *values).getresult()[0][0]
+
+
+def answer_on_request(blode_type, need_rhesus):
+    query_text = '''SELECT * FROM "Donor" WHERE "blood_type" = ANY($1::INTEGER[])'''
+    if not need_rhesus:
+        query_text += '''AND "rhesus" = False'''
+    if blode_type == 3:
+        need = {1, 3}
+    else:
+        need = set(range(1, blode_type + 1))
+    with pg.DB(**CONFIG_PARAMS) as conn:
+        return conn.query(query_text, need).getresult()[0]
