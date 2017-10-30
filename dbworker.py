@@ -5,17 +5,13 @@ from config import connect_data as CONFIG_PARAMS
 error_message = "Параметры указаны не верно"
 
 
-# CONFIG_PARAMS = load_config()
-
-
 class Donor:
     """
     Поля таблицы:
     "id": int,
     "blood_type": smallint,
     "rhesus": boolean,
-    "longitude": real,
-    "latitude": real,
+    "location" GEOMETRY
     """
 
     @staticmethod
@@ -59,6 +55,13 @@ class Donor:
             with pg.DB(**CONFIG_PARAMS) as conn:
                 conn.query(query, *values)
 
+    @staticmethod
+    def insert_donor_geo(user_id, longitude, latitude):
+        query_text = """UPDATE "Donor" SET ("location") = ('POINT({longitude} {latitude})') WHERE "id" = $1"""
+        query = query_text.format(longitude=longitude, latitude=latitude)
+        with pg.DB(**CONFIG_PARAMS) as conn:
+            conn.query(query, user_id)
+
 
 class Request:
     """
@@ -70,8 +73,7 @@ class Request:
     "need_rhesus" boolean,
     "message" text,
     "post_date" timestamp,
-    "longitude" real,
-    "latitude" real,
+    "location" GEOMETRY
     "registration_flag" boolean,
     "send_flag" boolean
     """
@@ -98,6 +100,13 @@ class Request:
             conn.query(query, *values)
 
     @staticmethod
+    def insert_request_geo(user_id, longitude, latitude):
+        query_text = """UPDATE "Donor" SET ("location") = ('POINT({longitude} {latitude})') WHERE "id" = $1"""
+        query = query_text.format(longitude=longitude, latitude=latitude)
+        with pg.DB(**CONFIG_PARAMS) as conn:
+            conn.query(query, user_id)
+
+    @staticmethod
     def upsert_request(request_info: dict):
         query_text = '''
         INSERT INTO "Request" ({columns})
@@ -122,13 +131,43 @@ class Request:
             #         return conn.query(query, *values).getresult()[0][0]
 
 
-def answer_on_request(blode_type, need_rhesus):
-    query_text = '''SELECT * FROM "Donor" WHERE "blood_type" = ANY($1::INTEGER[])'''
-    if not need_rhesus:
-        query_text += '''AND "rhesus" = False'''
-    if blode_type == 3:
-        need = {1, 3}
-    else:
-        need = set(range(1, blode_type + 1))
+def answer_on_request():
+    requests = get_requests()
+    for x in requests:
+        blood_type = x[1]
+        need_rhesus = x[2]
+        geo = x[3]
+        query_text = '''SELECT * FROM "Donor" 
+                        WHERE ST_DWithin("location", '{geo}',100000)
+                        AND "blood_type" = ANY($1::INTEGER[])'''
+        query = query_text.format(geo=geo)
+        if not need_rhesus:
+            query += '''AND "rhesus" = False'''
+        if blood_type == 3:
+            need = {1, 3}
+        else:
+            need = set(range(1, blood_type + 1))
+        with pg.DB(**CONFIG_PARAMS) as conn:
+            print(conn.query(query, need).getresult())
+
+
+def get_requests():
+    query_text = """SELECT "user_id","need_blood_type", "need_rhesus", "location" 
+                    FROM "Request" WHERE "send_flag" IS FALSE 
+                    AND "registration_flag" IS TRUE"""
     with pg.DB(**CONFIG_PARAMS) as conn:
-        return conn.query(query_text, need).getresult()[0]
+        return conn.query(query_text).getresult()
+
+        # def answer_on_request(blood_type, need_rhesus, geo):
+        #     query_text = '''SELECT * FROM "Donor"
+        #                     WHERE ST_DWithin(ST_GeometryFromText({geo}), ST_GeometryFromText("location"),100000)
+        #                     AND "blood_type" = ANY($1::INTEGER[])'''
+        #     query = query_text.format(geo=geo)
+        #     if not need_rhesus:
+        #         query += '''AND "rhesus" = False'''
+        #     if blood_type == 3:
+        #         need = {1, 3}
+        #     else:
+        #         need = set(range(1, blood_type + 1))
+        #     with pg.DB(**CONFIG_PARAMS) as conn:
+        #         return conn.query(query, need).getresult()

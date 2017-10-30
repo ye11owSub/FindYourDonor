@@ -13,16 +13,19 @@ SET check_function_bodies = false;
 SET client_min_messages = warning;
 SET row_security = off;
 
+
 --
 -- Name: Blood; Type: DATABASE; Schema: -; Owner: postgres
 --
 
 ALTER DATABASE "Blood" OWNER TO postgres;
 
-\connect "Blood" 
+\connect "Blood"
 
 DROP SCHEMA public CASCADE;
 CREATE SCHEMA public;
+
+CREATE EXTENSION postgis;
 
 SET search_path = public, pg_catalog;
 
@@ -30,13 +33,13 @@ SET default_tablespace = '';
 
 SET default_with_oids = false;
 
+
 CREATE TABLE "Donor"(
 	"id" int,
 	"blood_type" smallint,
 	"rhesus" boolean,
-	"longitude" real,
-	"latitude" real
-	
+	"location" GEOMETRY
+
 );
 
 CREATE TABLE public."Request" (
@@ -47,11 +50,18 @@ CREATE TABLE public."Request" (
 	"need_rhesus" boolean,
 	"message" text,
 	"post_date" timestamp DEFAULT now(),
-	"longitude" real,
-	"latitude" real,
+	"location" GEOMETRY,
 	"registration_flag" boolean DEFAULT FALSE ,
 	"send_flag" boolean DEFAULT FALSE
 );
+
+CREATE TABLE public."Donor_Request"(
+  "request_id" smallserial,
+	"user_id" int,
+	"post_date" timestamp DEFAULT now()
+);
+
+CREATE INDEX geozones_of_donor ON "Donor" USING GIST("location");
 
 CREATE UNIQUE INDEX not_fillin ON "Request" ("user_id") WHERE "registration_flag" Is FALSE ;
 SET client_encoding = 'UTF-8';
