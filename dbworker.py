@@ -101,7 +101,7 @@ class Request:
 
     @staticmethod
     def insert_request_geo(user_id, longitude, latitude):
-        query_text = """UPDATE "Donor" SET ("location") = ('POINT({longitude} {latitude})') WHERE "id" = $1"""
+        query_text = """UPDATE "Request" SET ("location") = ('POINT({longitude} {latitude})') WHERE "id" = $1"""
         query = query_text.format(longitude=longitude, latitude=latitude)
         with pg.DB(**CONFIG_PARAMS) as conn:
             conn.query(query, user_id)
@@ -131,28 +131,32 @@ class Request:
             #         return conn.query(query, *values).getresult()[0][0]
 
 
-def answer_on_request():
+def test():
     requests = get_requests()
     for x in requests:
         blood_type = x[1]
         need_rhesus = x[2]
         geo = x[3]
-        query_text = '''SELECT * FROM "Donor" 
+        answer_on_request(blood_type, need_rhesus, geo)
+
+
+def answer_on_request(blood_type, need_rhesus, geo):
+    query_text = '''SELECT * FROM "Donor" 
                         WHERE ST_DWithin("location", '{geo}',100000)
                         AND "blood_type" = ANY($1::INTEGER[])'''
-        query = query_text.format(geo=geo)
-        if not need_rhesus:
-            query += '''AND "rhesus" = False'''
-        if blood_type == 3:
-            need = {1, 3}
-        else:
-            need = set(range(1, blood_type + 1))
-        with pg.DB(**CONFIG_PARAMS) as conn:
-            print(conn.query(query, need).getresult())
+    query = query_text.format(geo=geo)
+    if not need_rhesus:
+        query += '''AND "rhesus" = False'''
+    if blood_type == 3:
+        need = {1, 3}
+    else:
+        need = set(range(1, blood_type + 1))
+    with pg.DB(**CONFIG_PARAMS) as conn:
+        print(conn.query(query, need).getresult())
 
 
 def get_requests():
-    query_text = """SELECT "user_id","need_blood_type", "need_rhesus", "location" 
+    query_text = """SELECT "request_id","need_blood_type", "need_rhesus", "location" 
                     FROM "Request" WHERE "send_flag" IS FALSE 
                     AND "registration_flag" IS TRUE"""
     with pg.DB(**CONFIG_PARAMS) as conn:
